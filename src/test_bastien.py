@@ -13,20 +13,20 @@ class CarAgent(EdgeBaseAgent):
     Args:
         EdgeBaseAgent
     """
-    def __init__(self, name, v, hp, x):
+    def __init__(self, name, vitesse, hp, x):
         super().__init__(name)
         self.hp = hp
         self.a = 0
-        self.v = v
+        self.vitesse = vitesse
         self.x = x
         self.last_update = time.time()
 
     def update(self):
         t = time.time()
         dt = t - self.last_update
-        self.v = self.a*dt + self.v
-        self.x = self.v*dt + self.x
-        printing = [self.name, self.a, self.v, self. x]
+        self.vitesse = self.a*dt + self.vitesse
+        self.x = self.vitesse*dt + self.x
+        printing = [self.name, self.a, self.vitesse, self. x]
         print(printing)
 
     def accelerate(self, value):
