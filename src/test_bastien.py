@@ -137,10 +137,12 @@ class DriverAgent(EdgeBaseAgent):
         self.send_distance_simulation(real_distance)
         # 
         if real_distance > 100:
-            Timer(self.reaction_time, self.accelerate(3))
+            timer = Timer(self.reaction_time, self.accelerate, [3])
+            timer.start()
         else:
-            Timer(self.reaction_time, self.accelerate(-8))
-    
+            timer = Timer(self.reaction_time, self.accelerate, [-8])
+            timer.start()  
+              
     def send_distance_simulation(self, distance):
         msg = AgentMessage()
         msg.addReceiver(simulation_name)
@@ -281,6 +283,6 @@ if __name__ == "__main__":
     auto = Autoroute(autoroute_name, liste_voitures)
     ta = TimeAgent("ta", 0.01)
     Car2.brake_lights()
-    time.sleep(10)
+    time.sleep(30)
     ta.stop()
     
