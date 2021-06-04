@@ -4,11 +4,12 @@ from agent_v2.agent_message import AgentMessage
 import time
 from threading import Timer
 import matplotlib.pyplot as plt
-from numpy import arange
 
 autoroute_name = "autoroute"
 autoroute_length = 300
 simulation_name = 'simulation'
+
+car_positions = {}
 
 
 class CarAgent(EdgeBaseAgent):
@@ -25,6 +26,7 @@ class CarAgent(EdgeBaseAgent):
         self.x = x
         self.last_update = time.time()
         self.driver = driver
+        car_positions[name] = []
 
     def update(self):
         t = time.time()
@@ -38,8 +40,9 @@ class CarAgent(EdgeBaseAgent):
         self.x = (self.vitesse*dt + self.x) % autoroute_length
         self.send_xv_driver()
         self.send_position_car(simulation_name)
-        printing = [self.name, self.a, self.vitesse, self. x]
-        print(printing)
+        #printing = [self.name, self.a, self.vitesse, self.x]
+        car_positions[self.name].append(round(self.x, 2))
+        #print(printing)
 
     def send_xv_driver(self):
         msg = AgentMessage()
@@ -271,9 +274,9 @@ if __name__ == "__main__":
     Car3 = CarAgent("3", 20, 50, 200, "d3")
 
     # Construction des conducteurs
-    Driver1 = DriverAgent("d1", 1, Car1.name, 0, 20) # Nom, temps reaction, nom voiture
-    Driver2 = DriverAgent("d2", 1, Car2.name, 100, 20)
-    Driver3 = DriverAgent("d3", 1, Car3.name, 200, 20)
+    Driver1 = DriverAgent("d1", 2, Car1.name, 0, 20) # Nom, temps reaction, nom voiture
+    Driver2 = DriverAgent("d2", 2, Car2.name, 100, 20)
+    Driver3 = DriverAgent("d3", 2, Car3.name, 200, 20)
 
     liste_voitures = [Car1.name, Car2.name, Car3.name]
     car_n_agent_list = [(Car1.name, Driver1.name), (Car2.name, Driver2.name), (Car3.name, Driver3.name)]
@@ -283,6 +286,8 @@ if __name__ == "__main__":
     auto = Autoroute(autoroute_name, liste_voitures)
     ta = TimeAgent("ta", 0.01)
     Car2.brake_lights()
-    time.sleep(30)
+    print(">>> La simulation est lancée ...")
+    time.sleep(15)
     ta.stop()
+    print(car_positions)
     
