@@ -2,13 +2,13 @@ from agent_v2.edge_agent import EdgeBaseAgent
 from agent_v2.agent_message import AgentMessage
 
 import time
+import random
 from threading import Timer
 import matplotlib.pyplot as plt
 
 autoroute_name = "autoroute"
 autoroute_length = 300
 simulation_name = 'simulation'
-
 car_positions = {}
 
 
@@ -79,8 +79,6 @@ class CarAgent(EdgeBaseAgent):
             self.send_position_car(split_content[1])
 
     
-            
-
 
 
 class DriverAgent(EdgeBaseAgent):
@@ -160,9 +158,11 @@ class Autoroute(EdgeBaseAgent):
     Args:
         EdgeBaseAgent ([type]): [description]
     """
-    def __init__(self, name, car_list):
+    def __init__(self, name, car_list, longueur):
         super().__init__(name)
         self.car_list = car_list
+        autoroute_length = longueur
+        autoroute_name = "autoroute"
 
     def receive_message(self, msg: AgentMessage):
         split_content = msg.getContent().split(" ")
@@ -264,30 +264,71 @@ class Simulation(EdgeBaseAgent):
             min_length = min(list_length)
             for i in range(len(self.D)):
                 plt.plot(self.TD[i], self.D[i])
+            plt.xlabel("Temps")
+            plt.ylabel("Distance relative")
             plt.show()
 
+def gaussian(mu, sigma):
+    nums = [] 
+    m = mu
+    sig = sigma
+    for i in range(10000): 
+        temp = random.gauss(mu, sigma) 
+        nums.append(temp)        
+    # Plotting pour afficher un graphe
+    #plt.hist(nums, bins = 100) 
+    #plt.show()
 
-if __name__ == "__main__":
-    # Construction des voitures
-    Car1 = CarAgent("1", 20, 50, 0, "d1")  # Nom, vitesse, horsepower, position
-    Car2 = CarAgent("2", 20, 50, 100, "d2")
-    Car3 = CarAgent("3", 20, 50, 200, "d3")
+    #Retourne valeur aléatoire dans la gaussienne
+    return random.choice(nums)
 
-    # Construction des conducteurs
-    Driver1 = DriverAgent("d1", 2, Car1.name, 0, 20) # Nom, temps reaction, nom voiture
-    Driver2 = DriverAgent("d2", 2, Car2.name, 100, 20)
-    Driver3 = DriverAgent("d3", 2, Car3.name, 200, 20)
+def initialisation(nbVoiture, vitesse, horsePower, position, longAutoroute, name_Autoroute):
+    liste_voitures, liste_Objets_Voitures, liste_drivers = [], [], []
+    
+    for i in range(nbVoiture):
+        position_temp = gaussian(position[i], 25)
+        horsePower_temp = gaussian(horsePower, 5)
+        Car1 = CarAgent(str(i), gaussian(vitesse, 5), horsePower_temp, position_temp, "d" + str(i))
+        Driver1 = DriverAgent("d" + str(i), 0.5, Car1.name, position_temp, horsePower_temp)
+                
+        liste_voitures.append(Car1.name)
+        liste_Objets_Voitures.append(Car1)
+        liste_drivers.append(Driver1.name)
 
-    liste_voitures = [Car1.name, Car2.name, Car3.name]
-    car_n_agent_list = [(Car1.name, Driver1.name), (Car2.name, Driver2.name), (Car3.name, Driver3.name)]
     sa = Simulation(simulation_name, liste_voitures, 0.01)
-
-    # Instanciation autoroute
-    auto = Autoroute(autoroute_name, liste_voitures)
+    autoroute = Autoroute(name_Autoroute, liste_voitures, longAutoroute)
     ta = TimeAgent("ta", 0.01)
-    Car2.brake_lights()
+    liste_Objets_Voitures[2].brake_lights()
     print(">>> La simulation est lancée ...")
     time.sleep(15)
     ta.stop()
     print(car_positions)
-    
+
+
+if __name__ == "__main__":
+    initialisation(3, 20, 50, [0, 100, 200], 300, "autoroute")
+
+    # Laisser les commentaires comme référence
+
+    # # Construction des voitures
+    # Car1 = CarAgent("1", 20, 50, 0, "d1")  # Nom, vitesse, horsepower, position
+    # Car2 = CarAgent("2", 20, 50, 100, "d2")
+    # Car3 = CarAgent("3", 20, 50, 200, "d3")
+
+    # # Construction des conducteurs
+    # Driver1 = DriverAgent("d1", 2, Car1.name, 0, 20) # Nom, temps reaction, nom voiture
+    # Driver2 = DriverAgent("d2", 2, Car2.name, 100, 20)
+    # Driver3 = DriverAgent("d3", 2, Car3.name, 200, 20)
+
+    # liste_voitures = [Car1.name, Car2.name, Car3.name]
+    # car_n_agent_list = [(Car1.name, Driver1.name), (Car2.name, Driver2.name), (Car3.name, Driver3.name)]
+    # sa = Simulation(simulation_name, liste_voitures, 0.01)
+
+    # # Instanciation autoroute
+    # auto = Autoroute(autoroute_name, liste_voitures)
+    # ta = TimeAgent("ta", 0.01)
+    # Car2.brake_lights()
+    # print(">>> La simulation est lancée ...")
+    # time.sleep(15)
+    # ta.stop()
+    # print(car_positions)
