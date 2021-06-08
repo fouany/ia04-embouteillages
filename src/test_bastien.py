@@ -10,6 +10,7 @@ autoroute_name = "autoroute"
 autoroute_length = 300
 simulation_name = 'simulation'
 car_positions = {}
+vmax = 36
 
 
 class CarAgent(EdgeBaseAgent):
@@ -35,8 +36,8 @@ class CarAgent(EdgeBaseAgent):
         self.vitesse = self.a*dt + self.vitesse
         if self.vitesse < 0:
             self.vitesse = 0
-        if self.vitesse > 36:
-            self.vitesse = 36
+        if self.vitesse > vmax:
+            self.vitesse = vmax
         self.x = (self.vitesse*dt + self.x) % autoroute_length
         self.send_xv_driver()
         self.send_position_car(simulation_name)
@@ -68,15 +69,24 @@ class CarAgent(EdgeBaseAgent):
         msg.setContent(f"brake_lights {self.name}")
         self.send_message(msg)
 
+    def handleChoc(self):
+        self.a = 0
+        self.vitesse = 0
+
 
     def receive_message(self, msg: AgentMessage):
         split_content = msg.getContent().split(" ")
         if split_content[0] == "accelerate":
             self.accelerate(int(split_content[1]))
+        elif split_content[0] == "decelerate":
+            self.accelerate(int(split_content[1]))
+            self.last_update += int(split_content[2])
         elif split_content[0] == "update":
             self.update()
         elif split_content[0] == "ask_position":
             self.send_position_car(split_content[1])
+        elif split_content[0] == "choc":
+            pass
 
     
 
@@ -93,6 +103,8 @@ class DriverAgent(EdgeBaseAgent):
         self.car_name = car_name
         self.position = position
         self.vitesse = vitesse
+        self.front_car = -1
+        self.alertDistance = False
 
     def receive_message(self, msg: AgentMessage):
         split_content = msg.getContent().split(" ")
@@ -102,19 +114,34 @@ class DriverAgent(EdgeBaseAgent):
             self.position = float(split_content[1])
             self.vitesse = float(split_content[2])
         elif split_content[0] == "front_car":
+            self.front_car = split_content[1]
             self.ask_position(split_content[1])
         elif split_content[0] == "car_position":
             self.handle_distance(float(split_content[1]) - float(self.position))
         elif split_content[0] == "update":
             self.ask_front_car()
+        elif split_content[0] == "front_car_position":
+            if split_content[1] == self.front_car :
+                #print("Current :", self.car_name, self.position, "front voiture: ", self.front_car, "position ", split_content[2])
+                self.handle_security_distance(float(split_content[2]))
+
 
 
     def accelerate(self, value):
-        msg = AgentMessage()
-        msg.addReceiver(self.car_name)
-        msg.Type = "Request"
-        msg.setContent(f"accelerate {value}")
-        self.send_message(msg)
+        if not self.alertDistance :
+            msg = AgentMessage()
+            msg.addReceiver(self.car_name)
+            msg.Type = "Request"
+            msg.setContent(f"accelerate {value}")
+            self.send_message(msg)
+
+    def decelerate(self, value):
+        if not self.alertDistance :
+            msg = AgentMessage()
+            msg.addReceiver(self.car_name)
+            msg.Type = "Request"
+            msg.setContent(f"decelerate {value} {self.reaction_time}")
+            self.send_message(msg)
 
     def ask_front_car(self):
         msg = AgentMessage()
@@ -137,12 +164,12 @@ class DriverAgent(EdgeBaseAgent):
             real_distance = distance
         self.send_distance_simulation(real_distance)
         # 
-        if real_distance > 100:
-            timer = Timer(self.reaction_time, self.accelerate, [3])
-            timer.start()
-        else:
-            timer = Timer(self.reaction_time, self.accelerate, [-8])
-            timer.start()  
+        # if real_distance > 100:
+        #     timer = Timer(self.reaction_time, self.accelerate, [3])
+        #     timer.start()
+        # else:
+        #     timer = Timer(self.reaction_time, self.accelerate, [-8])
+        #     timer.start()  
               
     def send_distance_simulation(self, distance):
         msg = AgentMessage()
@@ -150,6 +177,23 @@ class DriverAgent(EdgeBaseAgent):
         msg.Type = "Inform"
         msg.setContent(f"car_distance {distance} {self.car_name} {time.time()}")
         self.send_message(msg)
+
+    def sendChoc(self):
+        msg = AgentMessage()
+        msg.addReceiver(self.car_name)
+        msg.Type = "Inform"
+        msg.setContent("chock")
+        self.send_message(msg)
+    
+    def handle_security_distance(self, position):
+        dx = position - self.position
+        if dx < 0:
+            self.sendChoc()
+        elif dx < self.vitesse * 2.78 * 6:
+            self.alertDistance = True
+            self.decelerate(-8)
+        else :
+            self.alertDistance = True
 
 
 class Autoroute(EdgeBaseAgent):
@@ -184,6 +228,7 @@ class Autoroute(EdgeBaseAgent):
         msg.Type = "Request"
         msg.setContent("brake_lights -5")
         self.send_message(msg)
+
 
 
 
@@ -237,9 +282,10 @@ class TimeAgent(EdgeBaseAgent):
         self.send_message(msg)
 
 class Simulation(EdgeBaseAgent):
-    def __init__(self, name, car_list, dt):
+    def __init__(self, name, car_list, driver_list, dt):
         super().__init__(name)
         self.car_list = car_list
+        self.driver_list = driver_list
         self.X = []
         self.D = []
         self.TX = []
@@ -254,6 +300,7 @@ class Simulation(EdgeBaseAgent):
     def receive_message(self, msg: AgentMessage):
         split_content = msg.getContent().split(" ")
         if split_content[0] == 'car_position':
+            self.brodcastPosition(int(split_content[2])-1, split_content[1])
             self.X[int(split_content[2])-1].append(float(split_content[1]))
             self.TX[int(split_content[2])-1].append(float(split_content[3]) - self.creation_time)
         elif split_content[0] == 'car_distance':
@@ -268,6 +315,14 @@ class Simulation(EdgeBaseAgent):
             plt.ylabel("Distance relative")
             plt.show()
 
+    def brodcastPosition(self, car_name, car_position):
+        for driver in self.driver_list :
+            msg = AgentMessage()
+            msg.addReceiver(driver)
+            msg.Type = "Inform"
+            msg.setContent(f"front_car_position {car_name} {car_position}")
+            self.send_message(msg)
+
 def gaussian(mu, sigma):
     nums = [] 
     m = mu
@@ -278,11 +333,10 @@ def gaussian(mu, sigma):
     # Plotting pour afficher un graphe
     #plt.hist(nums, bins = 100) 
     #plt.show()
-
     #Retourne valeur aléatoire dans la gaussienne
     return random.choice(nums)
 
-def initialisation(nbVoiture, vitesse, horsePower, position, longAutoroute, name_Autoroute):
+def initialisation(nbVoiture, vitesse, horsePower, position, longAutoroute, name_Autoroute, vm):
     liste_voitures, liste_Objets_Voitures, liste_drivers = [], [], []
     
     for i in range(nbVoiture):
@@ -295,18 +349,19 @@ def initialisation(nbVoiture, vitesse, horsePower, position, longAutoroute, name
         liste_Objets_Voitures.append(Car1)
         liste_drivers.append(Driver1.name)
 
-    sa = Simulation(simulation_name, liste_voitures, 0.01)
+    sa = Simulation(simulation_name, liste_voitures, liste_drivers, 0.01)
     autoroute = Autoroute(name_Autoroute, liste_voitures, longAutoroute)
+    vmax = vm
     ta = TimeAgent("ta", 0.01)
     liste_Objets_Voitures[2].brake_lights()
     print(">>> La simulation est lancée ...")
     time.sleep(15)
     ta.stop()
-    print(car_positions)
+    #print(car_positions)
 
 
 if __name__ == "__main__":
-    initialisation(3, 20, 50, [0, 100, 200], 300, "autoroute")
+    initialisation(3, 20, 50, [0, 100, 200], 300, "autoroute", 36)
 
     # Laisser les commentaires comme référence
 
@@ -332,3 +387,8 @@ if __name__ == "__main__":
     # time.sleep(15)
     # ta.stop()
     # print(car_positions)
+
+    #recuperer position voiture en face
+    #a chaque update, verifier si la distance de securite est respecte (distance > % 2.78 * 6)
+    #si la distance de securite n'est pas respecté, il faut (decelerer / envoyer message de deceleration)
+    
