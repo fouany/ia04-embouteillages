@@ -80,7 +80,7 @@ class CarAgent(EdgeBaseAgent):
             self.accelerate(int(split_content[1]))
         elif split_content[0] == "decelerate":
             self.accelerate(int(split_content[1]))
-            self.last_update += int(split_content[2])
+            self.last_update += float(split_content[2])
         elif split_content[0] == "update":
             self.update()
         elif split_content[0] == "ask_position":
@@ -107,7 +107,7 @@ class DriverAgent(EdgeBaseAgent):
         self.alertDistance = False
 
     def receive_message(self, msg: AgentMessage):
-        print("current", self.car_name, "vitesse", self.vitesse, "position", self.position, "acceleration", self.alertDistance)
+        #print("current", self.car_name, "vitesse", self.vitesse, "position", self.position, "acceleration", self.alertDistance)
         split_content = msg.getContent().split(" ")
         if split_content[0] == "brake_lights":
             Timer(self.reaction_time, self.accelerate(int(split_content[1])))
@@ -123,7 +123,7 @@ class DriverAgent(EdgeBaseAgent):
             self.ask_front_car()
         elif split_content[0] == "front_car_position":
             if split_content[1] == self.front_car :
-                print("Current :", self.car_name, self.position, "front voiture: ", self.front_car, "position ", split_content[2])
+                #print("Current", self.car_name, self.position, "front voiture: ", self.front_car, "position ", split_content[2])
                 self.handle_security_distance(float(split_content[2]))
 
 
@@ -187,6 +187,7 @@ class DriverAgent(EdgeBaseAgent):
     
     def handle_security_distance(self, position):
         dx = abs(position - self.position)
+        print("Diff", dx, "Security ", (self.vitesse % 2.78) * 6,"car name", self.car_name, "Front car",self.front_car)
         if dx < 0.5 or dx > autoroute_length - 0.5:
             self.sendChoc()
         elif dx < (self.vitesse % 2.78) * 6:
@@ -309,11 +310,15 @@ class Simulation(EdgeBaseAgent):
         elif split_content[0] == 'print_simulation':
             list_length = [len(d) for d in self.D]
             min_length = min(list_length)
+            fig, axs = plt.subplots(2) 
             for i in range(len(self.D)):
-                plt.plot(self.TD[i], self.D[i])
-            plt.xlabel("Temps")
-            plt.ylabel("Distance relative")
+                axs[0].plot(self.TD[i], self.D[i])
+                fig.suptitle('Vertically stacked subplots')
+                axs[1].plot(self.TX[i], self.X[i]) 
+            # axs[0].xlabel("Temps")
+            # axs[0].ylabel("Distance relative")
             plt.show()
+            
 
     def brodcastPosition(self, car_name, car_position):
         for driver in self.driver_list :
