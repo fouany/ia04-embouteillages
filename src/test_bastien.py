@@ -86,7 +86,7 @@ class CarAgent(EdgeBaseAgent):
         elif split_content[0] == "ask_position":
             self.send_position_car(split_content[1])
         elif split_content[0] == "choc":
-            pass
+            self.handleChoc()
 
     
 
@@ -107,6 +107,7 @@ class DriverAgent(EdgeBaseAgent):
         self.alertDistance = False
 
     def receive_message(self, msg: AgentMessage):
+        print("current", self.car_name, "vitesse", self.vitesse, "position", self.position, "acceleration", self.alertDistance)
         split_content = msg.getContent().split(" ")
         if split_content[0] == "brake_lights":
             Timer(self.reaction_time, self.accelerate(int(split_content[1])))
@@ -122,7 +123,7 @@ class DriverAgent(EdgeBaseAgent):
             self.ask_front_car()
         elif split_content[0] == "front_car_position":
             if split_content[1] == self.front_car :
-                #print("Current :", self.car_name, self.position, "front voiture: ", self.front_car, "position ", split_content[2])
+                print("Current :", self.car_name, self.position, "front voiture: ", self.front_car, "position ", split_content[2])
                 self.handle_security_distance(float(split_content[2]))
 
 
@@ -136,12 +137,11 @@ class DriverAgent(EdgeBaseAgent):
             self.send_message(msg)
 
     def decelerate(self, value):
-        if not self.alertDistance :
-            msg = AgentMessage()
-            msg.addReceiver(self.car_name)
-            msg.Type = "Request"
-            msg.setContent(f"decelerate {value} {self.reaction_time}")
-            self.send_message(msg)
+        msg = AgentMessage()
+        msg.addReceiver(self.car_name)
+        msg.Type = "Request"
+        msg.setContent(f"decelerate {value} {self.reaction_time}")
+        self.send_message(msg)
 
     def ask_front_car(self):
         msg = AgentMessage()
@@ -164,9 +164,9 @@ class DriverAgent(EdgeBaseAgent):
             real_distance = distance
         self.send_distance_simulation(real_distance)
         # 
-        # if real_distance > 100:
-        #     timer = Timer(self.reaction_time, self.accelerate, [3])
-        #     timer.start()
+        if real_distance > 100:
+            timer = Timer(self.reaction_time, self.accelerate, [3])
+            timer.start()
         # else:
         #     timer = Timer(self.reaction_time, self.accelerate, [-8])
         #     timer.start()  
@@ -182,18 +182,18 @@ class DriverAgent(EdgeBaseAgent):
         msg = AgentMessage()
         msg.addReceiver(self.car_name)
         msg.Type = "Inform"
-        msg.setContent("chock")
+        msg.setContent("choc")
         self.send_message(msg)
     
     def handle_security_distance(self, position):
-        dx = position - self.position
-        if dx < 0:
+        dx = abs(position - self.position)
+        if dx < 0.5 or dx > autoroute_length - 0.5:
             self.sendChoc()
-        elif dx < self.vitesse * 2.78 * 6:
+        elif dx < (self.vitesse % 2.78) * 6:
             self.alertDistance = True
             self.decelerate(-8)
         else :
-            self.alertDistance = True
+            self.alertDistance = False
 
 
 class Autoroute(EdgeBaseAgent):
