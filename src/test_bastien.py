@@ -16,7 +16,7 @@ class CarAgent(EdgeBaseAgent):
     Args:
         EdgeBaseAgent
     """
-    def __init__(self, name, vitesse, acceleration, deceleration, x, driver, autoroute_length):
+    def __init__(self, name, vitesse, vitesse_max, acceleration, deceleration, x, driver, autoroute_length):
         super().__init__(name)
         self.acceleration = acceleration
         self.deceleration = deceleration
@@ -26,6 +26,7 @@ class CarAgent(EdgeBaseAgent):
         self.last_update = time.time()
         self.driver = driver
         self.autoroute_length = autoroute_length
+        self.vitesse_max = vitesse_max
 
     def update(self):
         t = time.time()
@@ -34,8 +35,8 @@ class CarAgent(EdgeBaseAgent):
         self.vitesse = self.a*dt + self.vitesse
         if self.vitesse < 0:
             self.vitesse = 0
-        if self.vitesse > 36:
-            self.vitesse = 36
+        if self.vitesse > self.vitesse_max:
+            self.vitesse = self.vitesse_max
         self.x = (self.vitesse*dt + self.x) % self.autoroute_length
         self.send_xv_driver()
         self.send_position_car(simulation_name)
@@ -59,19 +60,14 @@ class CarAgent(EdgeBaseAgent):
     def accelerate(self, value):
         self.a = value
 
-    def brake_lights(self):
-        msg = AgentMessage()
-        msg.addReceiver(autoroute_name)
-        msg.Type = "Request"
-        msg.setContent(f"brake_lights {self.name}")
-        self.send_message(msg)
-
     def receive_message(self, msg: AgentMessage):
         split_content = msg.getContent().split(" ")
         if split_content[0] == "accelerate":
-            self.accelerate(int(self.acceleration))
+            self.accelerate(self.acceleration)
         elif split_content[0] == "break":
-            self.accelerate(int(self.deceleration))
+            self.accelerate(self.deceleration)
+        elif split_content[0] == "stop":
+            self.accelerate(-10000)
         elif split_content[0] == "update":
             self.update()
         elif split_content[0] == "ask_position":
@@ -113,8 +109,10 @@ class DriverAgent(EdgeBaseAgent):
     def accelerate(self, value):
         if value > 0:
             content = "accelerate"
-        else:
+        elif value < 0:
             content = "break"
+        else:
+            content = 'stop'
         msg = AgentMessage()
         msg.addReceiver(self.car_name)
         msg.Type = "Request"
@@ -144,6 +142,8 @@ class DriverAgent(EdgeBaseAgent):
         if real_distance > self.security_distance:
             timer = Timer(self.reaction_time, self.accelerate, [1])
             timer.start()
+        elif real_distance <= 0.05*self.security_distance:
+            self.accelerate(0)
         else:
             timer = Timer(self.reaction_time, self.accelerate, [-1])
             timer.start()  
@@ -180,13 +180,6 @@ class Autoroute(EdgeBaseAgent):
             front_car_name = self.car_list[(self.car_list.index(split_content[1]) + 1) % len(self.car_list)]
             msg.setContent(f"front_car {front_car_name}")
             self.send_message(msg)
-
-    def transfert(self, receiver_name):
-        msg = AgentMessage()
-        msg.addReceiver(receiver_name)
-        msg.Type = "Request"
-        msg.setContent("brake_lights -5")
-        self.send_message(msg)
 
 
 
@@ -268,7 +261,10 @@ class Simulation(EdgeBaseAgent):
                 t = time_list[i]
                 if t > dti:
                     v = (x - previous_x) / (t - previous_t)
-                    x_sync = previous_x + v*(dti - previous_t)
+                    if v > 36 or v < 0:
+                        x_sync = x
+                    else:
+                        x_sync = previous_x + v*(dti - previous_t)
                     X_sync[car_name].append(x_sync)
                     dti = dti + self.dt
                 previous_x = x
@@ -291,12 +287,11 @@ class Simulation(EdgeBaseAgent):
             plt.xlabel("Temps")
             plt.ylabel("Distance relative")
             plt.show()
-            print(self.TX)
             import json
             with open('car_positions.json', 'w') as fp:
                 json.dump(self.sync(), fp, ensure_ascii=False)
 
-def initialisation(nbVoiture=3, vitesse=20, acceleration=3, deceleration=-6, autoroute_length=300, var_position=0,
+def initialisation(nbVoiture=3, vitesse=27, vitesse_max = 36, acceleration=3, deceleration=-6, autoroute_length=300, var_position=0,
              var_vitesse=0, var_acceleration=0, var_deceleration=0, dt=0.01, reaction_time=0.5, var_rt=0, simulation_time=15):
     liste_voitures, liste_Objets_Voitures, liste_drivers = [], [], []
     security_distance = autoroute_length/nbVoiture
@@ -306,7 +301,7 @@ def initialisation(nbVoiture=3, vitesse=20, acceleration=3, deceleration=-6, aut
         deceleration_temp = random.gauss(deceleration, var_deceleration)
         reaction_time_temp = random.gauss(reaction_time, var_rt)
         vitesse_temp = random.gauss(vitesse, var_vitesse)
-        Car = CarAgent(str(i), vitesse_temp, acceleration_temp, deceleration_temp, position_temp, "d" + str(i), autoroute_length)
+        Car = CarAgent(str(i), vitesse_temp, vitesse_max, acceleration_temp, deceleration_temp, position_temp, "d" + str(i), autoroute_length)
         Driver = DriverAgent("d" + str(i), reaction_time_temp, Car.name, position_temp, acceleration_temp, security_distance, autoroute_length)
                 
         liste_voitures.append(Car.name)
@@ -316,14 +311,14 @@ def initialisation(nbVoiture=3, vitesse=20, acceleration=3, deceleration=-6, aut
     sa = Simulation(simulation_name, liste_voitures, dt*10)
     autoroute = Autoroute(autoroute_name, liste_voitures, autoroute_length)
     ta = TimeAgent("ta", dt)
-    liste_Objets_Voitures[0].brake_lights()
+    liste_Objets_Voitures[0].accelerate(deceleration)
     print(">>> La simulation est lancée ...")
     time.sleep(simulation_time)
     ta.stop()
 
 
 if __name__ == "__main__":
-    initialisation(simulation_time=30, autoroute_length=500, nbVoiture=5)
+    initialisation(simulation_time=30)
 
     # Laisser les commentaires comme référence
 
